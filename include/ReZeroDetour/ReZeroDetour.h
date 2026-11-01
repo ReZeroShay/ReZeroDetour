@@ -278,7 +278,6 @@ namespace ReZeroDetour {
         using pointer = R (*)(Args...);
 
       public:
-        static_assert(HookCallable<F, InlineHook, R, Args...>, "Callable must accept InlineHook and arguments");
         template <typename T>
             requires HookCallable<T, InlineHook, R, Args...>
         InlineHook(pointer src, T &&f) : Src(src), Callable(std::forward<T>(f)) {}
