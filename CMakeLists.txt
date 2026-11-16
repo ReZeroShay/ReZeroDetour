@@ -101,6 +101,14 @@ elseif(REZERODETOUR_DISASSEMBLER STREQUAL "HDE64")
     message(FATAL_ERROR "HDE64 backend is not implemented yet.")
 endif()
 
+FetchContent_Declare(
+    SmpAllocator
+    GIT_REPOSITORY https://github.com/ReZeroShay/SmpAllocator.git
+    GIT_TAG main
+)
+FetchContent_MakeAvailable(SmpAllocator)
+
+target_link_libraries(ReZeroDetour PUBLIC SmpAllocator::SmpAllocator)
 
 if(REZERODETOUR_BUILD_TESTS)
     include(CTest)

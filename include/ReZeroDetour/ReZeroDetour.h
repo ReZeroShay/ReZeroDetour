@@ -15,7 +15,7 @@
 #include <ReZeroDetour/Thunk.h>
 #include <ReZeroDetour/Patch.h>
 #include <ReZeroDetour/Disassembler.h>
-#include <ReZeroDetour/Allocator.h>
+#include <SmpAllocator/SmpAllocator.h>
 
 #if !defined(WIN32_LEAN_AND_MEAN)
 #    define WIN32_LEAN_AND_MEAN
@@ -508,24 +508,8 @@ namespace ReZeroDetour {
         void *ExecutionMem = nullptr;
     };
 
-    // defaultAllocator 是全局可变的：安装 hook 可能来自多个线程
-    namespace detail {
-        inline auto allocatorLock() noexcept -> CriticalSection & {
-            static CriticalSection lock;
-            return lock;
-        }
-#ifndef REZERODETOUR_ALLOCATOR_LEN
-#    define REZERODETOUR_ALLOCATOR_LEN 0x1000
-#endif
-        inline uint8_t defaultAllocatorBuffer[REZERODETOUR_ALLOCATOR_LEN];
-        inline LinearAllocator defaultAllocator(reinterpret_cast<std::byte *>(defaultAllocatorBuffer),
-                                                REZERODETOUR_ALLOCATOR_LEN);
-
-    } // namespace detail
-
     template <typename R, typename... Args, typename F> inline auto *makeInlineHook(R (*src)(Args...), F &&f) {
-        detail::LockGuard<detail::CriticalSection> guard(detail::allocatorLock());
-        return detail::defaultAllocator.create<InlineHook<R(Args...), std::decay_t<F>>>(src, std::forward<F>(f));
+        return smp::create<InlineHook<R(Args...), std::decay_t<F>>>(src, std::forward<F>(f));
     }
 
 } // namespace ReZeroDetour
