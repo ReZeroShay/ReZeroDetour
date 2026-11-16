@@ -9,12 +9,11 @@
 #include <functional>
 #include <intrin.h>
 #include <ReZeroDetour/ReZeroLib.h>
-#include <ReZeroDetour/Error.h>
-#include <ReZeroDetour/TlsContext.h>
+#include <ReZeroDetour/Sync.h>
+#include <ReZeroDetour/CodeGen.h>
 #include <ReZeroDetour/Trampoline.h>
 #include <ReZeroDetour/Thunk.h>
-#include <ReZeroDetour/Patch.h>
-#include <ReZeroDetour/Disassembler.h>
+#include <ReZeroDetour/PatchTable.h>
 #include <SmpAllocator/SmpAllocator.h>
 
 #if !defined(WIN32_LEAN_AND_MEAN)
@@ -102,40 +101,6 @@ namespace ReZeroDetour {
 
             return nullptr;
         }
-        class CriticalSection {
-          public:
-            CriticalSection() { InitializeCriticalSection(&Cs); }
-
-            ~CriticalSection() { DeleteCriticalSection(&Cs); }
-
-            CriticalSection(const CriticalSection &) = delete;
-            CriticalSection &operator=(const CriticalSection &) = delete;
-
-            void lock() noexcept { EnterCriticalSection(&Cs); }
-
-            void unlock() noexcept { LeaveCriticalSection(&Cs); }
-
-          private:
-            CRITICAL_SECTION Cs{};
-        };
-
-        template <typename T>
-        concept LockLike = requires(T &lock) {
-            lock.lock();
-            lock.unlock();
-        };
-        template <LockLike T> class LockGuard {
-          public:
-            explicit LockGuard(T &lock) : Lock(lock) { Lock.lock(); }
-
-            ~LockGuard() { Lock.unlock(); }
-
-            LockGuard(const LockGuard &) = delete;
-            LockGuard &operator=(const LockGuard &) = delete;
-
-          private:
-            T &Lock;
-        };
 
         // 线程活动栈 (thread-local active stack)
         //
@@ -280,7 +245,8 @@ namespace ReZeroDetour {
       public:
         template <typename T>
             requires HookCallable<T, InlineHook, R, Args...>
-        InlineHook(pointer src, T &&f) : Src(src), Callable(std::forward<T>(f)) {}
+        InlineHook(pointer src, T &&f, PatchTable *table = &defaultPatchTable())
+            : Callable(std::forward<T>(f)), Src(src), Table(table) {}
 
         // 卸载，并尽量保证"返回后不再有 detour 在跑"。
         //
@@ -312,10 +278,13 @@ namespace ReZeroDetour {
                 return {};
             //  先卸载再等 ⇒ 不会再有新自增 ⇒ 计数单调下降 ⇒ 必然收敛 ✓
 
-            // 1. 先卸载补丁：不再有新线程进来
+            // 1. 先卸载补丁：不再有新线程进来。记录可能已经被 restoreAll() 清掉，
+            //    restore 对这种"已经不在表里"的句柄返回成功。
+            Result<void> patched{};
             {
                 detail::LockGuard<detail::CriticalSection> guard(Lock);
-                REZERO_CHECK(Patch.uninstall());
+                patched = Table->restore(Patch);
+                Patch = PatchTable::InvalidPatchId;
             }
 
             const bool drained = waitForActiveCallsToDrain();
@@ -329,6 +298,10 @@ namespace ReZeroDetour {
 
             if (!drained) {
                 return Error(ErrorCode::UninstallTimedOut);
+            }
+            // 补丁被别人覆盖过：只汇报，不强行还原（还原会破坏对方的补丁）
+            if (patched.is_err()) {
+                return patched;
             }
             return {};
         }
@@ -354,10 +327,26 @@ namespace ReZeroDetour {
             }
 
             // 入口 stub：计数 +1 -> 保存实参寄存器 -> 调 bindCurrentHook(this) -> 恢复 -> 跳 dispatch。
-            Thunk.at(thunk).build(this, reinterpret_cast<void *>(&dispatch), &ActiveCalls);
+            auto thunkBuilt = Thunk.at(thunk).build(this, reinterpret_cast<void *>(&dispatch), &ActiveCalls);
+            if (!thunkBuilt) {
+                releaseExecutionMemory();
+                return thunkBuilt;
+            }
 
-            auto patched = Patch.install(Src, Thunk.pointer());
+            // 登记到补丁表。同一个目标已经有补丁时在这里被拒（AlreadyHooked），
+            // 此时这份执行页还没被任何东西引用，直接还回去。
+            auto added = Table->add(reinterpret_cast<void *>(Src), kRel32JumpSize, Thunk.pointer());
+            if (!added) {
+                releaseExecutionMemory();
+                return Error{added.error()};
+            }
+            Patch = *added;
+
+            auto patched = Table->install(Patch);
             if (!patched) {
+                // 失败的路径也要清掉记录；字节可能已经写进去了，交给 restore 收尾。
+                (void)Table->restore(Patch);
+                Patch = PatchTable::InvalidPatchId;
                 releaseExecutionMemory();
                 return patched;
             }
@@ -501,15 +490,18 @@ namespace ReZeroDetour {
         HookMode Mode = HookMode::Replace;
         pointer Src = nullptr;
         Trampoline Trampoline;
-        InlinePatch Patch;
+        // 补丁表里的记录号。模板层不认识补丁字节，只持有这个句柄。
+        PatchTable *Table = nullptr;
+        PatchTable::PatchId Patch = PatchTable::InvalidPatchId;
         Thunk Thunk;
         bool Installed = false;
         detail::CriticalSection Lock;
         void *ExecutionMem = nullptr;
     };
 
-    template <typename R, typename... Args, typename F> inline auto *makeInlineHook(R (*src)(Args...), F &&f) {
-        return smp::create<InlineHook<R(Args...), std::decay_t<F>>>(src, std::forward<F>(f));
+    template <typename R, typename... Args, typename F>
+    inline auto *makeInlineHook(R (*src)(Args...), F &&f, PatchTable *table = &defaultPatchTable()) {
+        return smp::create<InlineHook<R(Args...), std::decay_t<F>>>(src, std::forward<F>(f), table);
     }
 
 } // namespace ReZeroDetour

@@ -1353,3 +1353,280 @@ TEST_CASE("InlineHook - trampoline works for void returns") {
 // "卸载时不释放可执行页"；现在 releaseExecutionMemory() 一律释放并清空
 // Thunk / Trampoline 的指针，`trampoline()` 在卸载后不再可用（要调原函数直接调 Src），
 // 所以该用例已删除。卸载后"在飞调用"的安全性由 [drain] 那组用例覆盖。
+
+// ============================================================
+// 补丁表：字节层面的统一管理
+//
+// 这一层不认识 hook 的签名，只认「目标地址 + 原始字节」，可以脱离
+// InlineHook 单独测：登记、写入、还原、重复目标、批量还原。
+// ============================================================
+
+TEST_CASE("PatchTable - rejects a second patch on the same target") {
+    PatchTable table;
+
+    auto *target = reinterpret_cast<void *>(&site_add);
+    auto *destination = reinterpret_cast<void *>(&site_mul);
+
+    auto first = table.add(target, kRel32JumpSize, destination);
+    REQUIRE(first);
+    CHECK(table.find(target) == *first);
+
+    // 同一个目标第二次登记必须被拒：否则后装的那条会把前一条的 jmp
+    // 当成"原始字节"备份下来，卸载顺序一反就还原成野跳转。
+    auto second = table.add(target, kRel32JumpSize, destination);
+    REQUIRE(second.is_err());
+    CHECK(second.error() == ErrorCode::AlreadyHooked);
+    CHECK(table.size() == 1);
+}
+
+TEST_CASE("PatchTable - install writes the jump and restore puts the bytes back") {
+    PatchTable table;
+
+    auto *target = reinterpret_cast<void *>(&site_add);
+    auto *destination = reinterpret_cast<void *>(&site_mul);
+
+    std::uint8_t original[kRel32JumpSize] = {};
+    std::memcpy(original, target, kRel32JumpSize);
+
+    auto id = table.add(target, kRel32JumpSize, destination);
+    REQUIRE(id);
+
+    REQUIRE(table.install(*id));
+    CHECK(*static_cast<const std::uint8_t *>(target) == 0xE9);
+
+    REQUIRE(table.restore(*id));
+    CHECK(std::memcmp(original, target, kRel32JumpSize) == 0);
+
+    // 还原之后记录就作废了，同一目标可以重新登记
+    CHECK(table.size() == 0);
+    CHECK(table.find(target) == PatchTable::InvalidPatchId);
+
+    // 重复还原不是错误
+    CHECK(table.restore(*id));
+}
+
+TEST_CASE("PatchTable - restoreAll restores every patch and reports the count") {
+    PatchTable table;
+
+    auto *add = reinterpret_cast<void *>(&site_add);
+    auto *mul = reinterpret_cast<void *>(&site_mul);
+
+    std::uint8_t original_add[kRel32JumpSize] = {};
+    std::uint8_t original_mul[kRel32JumpSize] = {};
+    std::memcpy(original_add, add, kRel32JumpSize);
+    std::memcpy(original_mul, mul, kRel32JumpSize);
+
+    auto first = table.add(add, kRel32JumpSize, mul);
+    auto second = table.add(mul, kRel32JumpSize, add);
+    REQUIRE(first);
+    REQUIRE(second);
+
+    REQUIRE(table.install(*first));
+    REQUIRE(table.install(*second));
+    CHECK(table.size() == 2);
+
+    const auto report = table.restoreAll();
+    CHECK(report.Restored == 2);
+    CHECK(report.Failed == 0);
+    CHECK_FALSE(report.HasError);
+    CHECK(table.size() == 0);
+
+    CHECK(std::memcmp(original_add, add, kRel32JumpSize) == 0);
+    CHECK(std::memcmp(original_mul, mul, kRel32JumpSize) == 0);
+
+    // 批量还原后表是空的，两个目标都能重新登记
+    CHECK(table.add(add, kRel32JumpSize, mul));
+    CHECK(table.add(mul, kRel32JumpSize, add));
+}
+// ============================================================
+// Thunk：生成的 stub 与手写版本的字节布局一致
+//
+// 指令长度是这条链上最容易悄悄变的东西（例如 mov imm64 退化成 7 字节的
+// imm32 形式），布局一漂，stub 内偏移、容量判断就全错。这里把每个偏移钉死。
+// ============================================================
+
+TEST_CASE("Thunk - generated stub keeps the expected encoding") {
+    std::uint8_t stub[256] = {};
+
+    auto *instance = reinterpret_cast<void *>(0x0000112233445566ull);
+    auto *entry = reinterpret_cast<void *>(0x0000778899AABBCCull);
+    auto *counter = reinterpret_cast<void *>(0x0000DDEEFF001122ull);
+
+    Thunk thunk;
+    REQUIRE(thunk.at(stub).build(instance, entry, counter));
+    CHECK(thunk.size() == 116);
+
+    // mov r10, imm64(instance)
+    CHECK(std::memcmp(&stub[0], "\x49\xBA", 2) == 0);
+    CHECK(std::memcmp(&stub[2], &instance, 8) == 0);
+
+    // mov r11, imm64(activeCalls)
+    CHECK(std::memcmp(&stub[10], "\x49\xBB", 2) == 0);
+    CHECK(std::memcmp(&stub[12], &counter, 8) == 0);
+
+    // lock inc dword ptr [r11]
+    CHECK(std::memcmp(&stub[20], "\xF0\x41\xFF\x03", 4) == 0);
+
+    // push rcx / rdx / r8 / r9 / rax
+    CHECK(std::memcmp(&stub[24], "\x51\x52\x41\x50\x41\x51\x50", 7) == 0);
+
+    // sub rsp, 0x60
+    CHECK(std::memcmp(&stub[31], "\x48\x83\xEC\x60", 4) == 0);
+
+    // movups [rsp+20/30/40/50], xmm0..3
+    CHECK(std::memcmp(&stub[35], "\x0F\x11\x44\x24\x20", 5) == 0);
+    CHECK(std::memcmp(&stub[40], "\x0F\x11\x4C\x24\x30", 5) == 0);
+    CHECK(std::memcmp(&stub[45], "\x0F\x11\x54\x24\x40", 5) == 0);
+    CHECK(std::memcmp(&stub[50], "\x0F\x11\x5C\x24\x50", 5) == 0);
+
+    // mov rcx, r10
+    CHECK(std::memcmp(&stub[55], "\x4C\x89\xD1", 3) == 0);
+
+    // mov r11, imm64(bindCurrentHook) ; call r11
+    CHECK(std::memcmp(&stub[58], "\x49\xBB", 2) == 0);
+    auto setter = reinterpret_cast<void *>(&detail::bindCurrentHook);
+    CHECK(std::memcmp(&stub[60], &setter, 8) == 0);
+    CHECK(std::memcmp(&stub[68], "\x41\xFF\xD3", 3) == 0);
+
+    // movups xmm0..3, [rsp+20/30/40/50]
+    CHECK(std::memcmp(&stub[71], "\x0F\x10\x44\x24\x20", 5) == 0);
+    CHECK(std::memcmp(&stub[76], "\x0F\x10\x4C\x24\x30", 5) == 0);
+    CHECK(std::memcmp(&stub[81], "\x0F\x10\x54\x24\x40", 5) == 0);
+    CHECK(std::memcmp(&stub[86], "\x0F\x10\x5C\x24\x50", 5) == 0);
+
+    // add rsp, 0x60
+    CHECK(std::memcmp(&stub[91], "\x48\x83\xC4\x60", 4) == 0);
+
+    // pop rax / r9 / r8 / rdx / rcx
+    CHECK(std::memcmp(&stub[95], "\x58\x41\x59\x41\x58\x5A\x59", 7) == 0);
+
+    // jmp qword ptr [rip+0] ; <quad entry>
+    CHECK(std::memcmp(&stub[102], "\xFF\x25\x00\x00\x00\x00", 6) == 0);
+    CHECK(std::memcmp(&stub[108], &entry, 8) == 0);
+}
+// ============================================================
+// Patch：两条跳转也由 CodeGen 编码，长度固定
+// ============================================================
+
+TEST_CASE("Patch - rel32 jump is 5 bytes and carries the right displacement") {
+    std::uint8_t buffer[kRel32JumpSize] = {};
+
+    const auto src = reinterpret_cast<intptr_t>(&buffer[0]);
+    const auto dest = src + 0x1234;
+
+    REQUIRE(makeRel32JumpAt({buffer, kRel32JumpSize}, src, dest));
+
+    CHECK(buffer[0] == 0xE9);
+
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, &buffer[1], 4);
+    CHECK(displacement == static_cast<std::int32_t>(dest - (src + kRel32JumpSize)));
+
+    // 位移装不进 int32 时必须报错，而不是截断
+    CHECK(makeRel32JumpAt({buffer, kRel32JumpSize}, src, src + 0x80000005ll).is_err());
+}
+
+TEST_CASE("Patch - absolute jump is 14 bytes for any address") {
+    // 常见情况：低 32 位够大，push 直接就是 5 字节的 68 形式
+    {
+        std::uint8_t buffer[kAbsoluteJumpSize] = {};
+        const auto dest = static_cast<uintptr_t>(0x00007FF67524C930ull);
+
+        REQUIRE(makeAbsoluteJumpAt({buffer, kAbsoluteJumpSize}, dest));
+
+        CHECK(buffer[0] == 0x68);
+        std::uint32_t low = 0;
+        std::memcpy(&low, &buffer[1], 4);
+        CHECK(low == static_cast<std::uint32_t>(dest));
+
+        CHECK(buffer[5] == 0xC7);
+        CHECK(buffer[6] == 0x44);
+        CHECK(buffer[7] == 0x24);
+        CHECK(buffer[8] == 0x04);
+
+        std::uint32_t high = 0;
+        std::memcpy(&high, &buffer[9], 4);
+        CHECK(high == static_cast<std::uint32_t>(dest >> 32));
+
+        CHECK(buffer[13] == 0xC3);
+    }
+
+    // 低 32 位很小：编码器会选 2 字节的 6A 形式，pushImm32 用 NOP 补回 5 字节，
+    // 保证这条跳转永远是 14 字节
+    {
+        std::uint8_t buffer[kAbsoluteJumpSize] = {};
+        const auto dest = static_cast<uintptr_t>(0x0000000000000021ull);
+
+        REQUIRE(makeAbsoluteJumpAt({buffer, kAbsoluteJumpSize}, dest));
+
+        CHECK(buffer[0] == 0x6A);
+        CHECK(buffer[1] == 0x21);
+        CHECK(buffer[2] == 0x90);
+        CHECK(buffer[3] == 0x90);
+        CHECK(buffer[4] == 0x90);
+        CHECK(buffer[5] == 0xC7);
+        CHECK(buffer[13] == 0xC3);
+    }
+}
+
+// ============================================================
+// IntrusiveList：补丁表用的侵入式单链表
+// ============================================================
+
+TEST_CASE("IntrusiveList - push, iterate, erase while iterating") {
+    struct Node {
+        IntrusiveListNode Link;
+        int Value = 0;
+    };
+
+    IntrusiveList<Node, &Node::Link> list;
+    Node a;
+    Node b;
+    Node c;
+    Node d;
+    a.Value = 1;
+    b.Value = 2;
+    c.Value = 3;
+    d.Value = 4;
+
+    list.pushFront(a);
+    list.pushFront(b);
+    list.pushFront(c);
+    list.pushBack(d);
+
+    CHECK(list.size() == 4);
+    CHECK(list.front().Value == 3);
+    CHECK(list.back().Value == 4);
+
+    // 头插顺序：3, 2, 1，再 pushBack 一个 4
+    const int expected[] = {3, 2, 1, 4};
+    int index = 0;
+    for (const Node &node : list) {
+        CHECK(node.Value == expected[index]);
+        ++index;
+    }
+    CHECK(index == 4);
+
+    // 边遍历边删：删掉偶数，erase 返回下一个迭代器
+    for (auto it = list.begin(); it != list.end();) {
+        if (it->Value % 2 == 0) {
+            it = list.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    CHECK(list.size() == 2);
+    for (const Node &node : list) {
+        CHECK(node.Value % 2 == 1);
+    }
+
+    // 按引用删除，删过的再删返回 false
+    CHECK(list.erase(c));
+    CHECK_FALSE(list.erase(c));
+    CHECK(list.size() == 1);
+    CHECK(list.front().Value == 1);
+
+    list.clear();
+    CHECK(list.empty());
+    CHECK(list.size() == 0);
+}

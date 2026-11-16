@@ -554,4 +554,25 @@ namespace ReZeroDetour {
         T first;
         U second;
     };
+
+    // 库的通用错误码。它是 Result 的错误类型，所以跟 Result 放在一起 ——
+    // 单独一个头文件只装这一个枚举，不值当。
+    enum class ErrorCode : uint8_t {
+        VirtualProtectFailed,
+        DisasmDecodeFailed,
+        UnsupportedPrologue,
+        DisasmRelocationOverflow,
+        AllocationFailed,
+        DecoderInitializeFailed,
+        UninstallTimedOut,
+        // 补丁表相关
+        PatchNotFound,          // 引用的补丁记录不存在（重复卸载会被当作已卸载，不报这个）
+        AlreadyHooked,          // 同一个目标地址已经有补丁了
+        PatchOverwritten,       // 目标处的字节被第三方改过，已无法安全还原
+        UnsupportedPatchSize,   // 补丁长度既不是 rel32 也不是绝对跳转
+        // 指令编码相关
+        EncodeFailed,           // Zydis 没能编码出这条指令
+        EncodedLengthMismatch,  // 编出来的长度和调用点声明的长度不一致
+        CodeGenBufferFull,      // 生成代码的缓冲区放不下
+    };
 }; // namespace ReZeroDetour

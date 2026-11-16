@@ -1,8 +1,7 @@
 #include <cstdint>
 
 #include <ReZeroDetour/ReZeroLib.h>
-#include <ReZeroDetour/Error.h>
-#include <ReZeroDetour/Disassembler.h>
+#include <ReZeroDetour/Trampoline.h>
 #include <Zydis/Zydis.h>
 #include <Zydis/Utils.h>
 

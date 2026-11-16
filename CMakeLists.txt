@@ -23,19 +23,6 @@ message(STATUS "ReZeroDetour disassembler backend ${REZERODETOUR_DISASSEMBLER}")
 message(STATUS "Build the ReZeroDetour tests ${REZERODETOUR_BUILD_TESTS}")
 
 # ----------------------------------------------------------------------
-# Compiler flags
-# ----------------------------------------------------------------------
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set(REZERODETOUR_NO_EXCEPTIONS -fno-exceptions -fno-unwind-tables)
-    set(REZERODETOUR_NO_RTTI -fno-rtti)
-    set(REZERODETOUR_WARNING_OPTIONS -Wall -Wextra)
-elseif(MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
-    set(REZERODETOUR_NO_EXCEPTIONS /EHs- /EHc- /D_HAS_EXCEPTIONS=0)
-    set(REZERODETOUR_NO_RTTI /GR-)
-    set(REZERODETOUR_WARNING_OPTIONS /W4 /utf-8)
-endif()
-
-# ----------------------------------------------------------------------
 # Library
 # ----------------------------------------------------------------------
 add_library(ReZeroDetour STATIC)
@@ -55,9 +42,9 @@ target_include_directories(ReZeroDetour
 )
 
 target_compile_options(ReZeroDetour PUBLIC
-    ${REZERODETOUR_NO_EXCEPTIONS}
-    ${REZERODETOUR_NO_RTTI}
-    ${REZERODETOUR_WARNING_OPTIONS}
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /utf-8 /EHs- /EHc- /D_HAS_EXCEPTIONS=0 /GR->
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -fno-exceptions -fno-rtti
+        -fno-unwind-tables -fno-asynchronous-unwind-tables>
 )
 
 # ----------------------------------------------------------------------
@@ -77,9 +64,10 @@ elseif(REZERODETOUR_DISASSEMBLER STREQUAL "ZYDIS")
     set(ZYDIS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(ZYDIS_BUILD_DOXYGEN OFF CACHE BOOL "" FORCE)
 
-    # Detour only needs instruction decoding.
+    # Detour needs instruction decoding, plus the encoder for the code generator
+    # (CodeGen.h) that builds stubs and jumps instead of hand-written opcodes.
     set(ZYDIS_FEATURE_DECODER ON CACHE BOOL "" FORCE)
-    set(ZYDIS_FEATURE_ENCODER OFF CACHE BOOL "" FORCE)
+    set(ZYDIS_FEATURE_ENCODER ON CACHE BOOL "" FORCE)
     set(ZYDIS_FEATURE_FORMATTER OFF CACHE BOOL "" FORCE)
 
     FetchContent_Declare(
@@ -91,7 +79,6 @@ elseif(REZERODETOUR_DISASSEMBLER STREQUAL "ZYDIS")
     FetchContent_MakeAvailable(Zydis)
     target_compile_definitions(ReZeroDetour PRIVATE ZYDIS_STATIC_DEFINE)
     target_compile_definitions(ReZeroDetour PRIVATE
-        ZYDIS_DISABLE_ENCODER
         ZYDIS_DISABLE_FORMATTER
     )
     target_link_libraries(ReZeroDetour PUBLIC Zydis)
@@ -104,7 +91,7 @@ endif()
 FetchContent_Declare(
     SmpAllocator
     GIT_REPOSITORY https://github.com/ReZeroShay/SmpAllocator.git
-    GIT_TAG main
+    GIT_TAG v0.1.0
 )
 FetchContent_MakeAvailable(SmpAllocator)
 

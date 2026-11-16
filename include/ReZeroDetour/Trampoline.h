@@ -1,18 +1,28 @@
 #pragma once
 #include <ReZeroDetour/ReZeroLib.h>
-#include <ReZeroDetour/Error.h>
-#include <ReZeroDetour/Patch.h>
-#include <ReZeroDetour/Disassembler.h>
+#include <ReZeroDetour/CodeGen.h>
 
 namespace ReZeroDetour {
+
+    // 把 src 开头至少 minPrologueBytes 字节的指令搬到 trampoline，并修正其中的
+    // 相对操作数（相对立即数 + RIP 相对访存）。返回实际搬走的字节数。
+    // 实现在 src/Disassembler.cpp（Zydis 解码器只在那里出现）。
+    class Disassembler {
+        template <typename T> using Result = Result<T, ErrorCode>;
+
+      public:
+        auto buildTrampolineFromPrologue(Span<uint8_t> src, Span<uint8_t> trampoline, size_t minPrologueBytes)
+            -> Result<uintptr_t>;
+    };
+
     class Trampoline {
         template <typename T> using Result = Result<T, ErrorCode>;
         using Pointer = void *;
 
       public:
-        // 搬过来的序言 + 尾部 14 字节绝对跳转所需的空间
+        // 搬过来的序言 + 尾部绝对跳转所需的空间
         static constexpr std::size_t kCapacity = 100;
-        static constexpr std::size_t kReturnJumpSize = 14;
+        static constexpr std::size_t kReturnJumpSize = kAbsoluteJumpSize;
 
         Trampoline() = default;
 
@@ -39,8 +49,8 @@ namespace ReZeroDetour {
             uintptr_t returnAddress = reinterpret_cast<uintptr_t>(src) + offset;
 
             // 2. 生成跳转到该绝对地址的代码片段
-            makeAbsoluteJumpAt(Span<uint8_t>(reinterpret_cast<uint8_t *>(Ptr) + offset, kReturnJumpSize),
-                               returnAddress);
+            REZERO_CHECK(makeAbsoluteJumpAt(Span<uint8_t>(reinterpret_cast<uint8_t *>(Ptr) + offset, kReturnJumpSize),
+                                            returnAddress));
 
             return {};
         }
