@@ -1,22 +1,33 @@
 include(FetchContent)
 FetchContent_Declare(
-    Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG        v3.8.0
+  doctest
+  GIT_REPOSITORY https://github.com/doctest/doctest
+  GIT_TAG v2.5.3
 )
-FetchContent_MakeAvailable(Catch2)
-target_compile_features(Catch2 PRIVATE cxx_std_17)
-target_compile_features(Catch2WithMain PRIVATE cxx_std_17)
+FetchContent_MakeAvailable(doctest)
 
-list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
-include(Catch)
+include("${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake")
 
-add_executable(detour_tests test.cpp)
+add_executable(detour_tests
+    test.cpp
+)
+
+target_compile_features(detour_tests PRIVATE cxx_std_23)
+
+target_compile_options(detour_tests PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /utf-8>
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -fno-rtti
+        -fno-unwind-tables -fno-asynchronous-unwind-tables>
+)
+
 target_link_libraries(detour_tests
     PRIVATE
         ReZero::ReZeroDetour
-        Catch2::Catch2WithMain
+        doctest::doctest_with_main
 )
-target_compile_features(detour_tests PRIVATE cxx_std_23)
 
-catch_discover_tests(detour_tests)
+doctest_discover_tests(
+    detour_tests
+    PROPERTIES
+        LABELS "unit"
+)

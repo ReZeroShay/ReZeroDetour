@@ -1,5 +1,6 @@
-
-#include <catch2/catch_test_macros.hpp>
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#define DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
+#include <doctest/doctest.h>
 
 #include <atomic>
 #include <cstdint>
@@ -80,7 +81,7 @@ static int g_site_hook_b_calls = 0;
 // Replace
 // ============================================================
 
-TEST_CASE("InlineHook - replace hook", "[hook][replace]") {
+TEST_CASE("InlineHook - replace hook") {
     g_side_effect = 0;
     g_last_arg = 0;
 
@@ -117,7 +118,7 @@ TEST_CASE("InlineHook - replace hook", "[hook][replace]") {
 // Before
 // ============================================================
 
-TEST_CASE("InlineHook - before hook preserves original result", "[hook][before]") {
+TEST_CASE("InlineHook - before hook preserves original result") {
     g_side_effect = 0;
     g_last_arg = 0;
 
@@ -154,7 +155,7 @@ TEST_CASE("InlineHook - before hook preserves original result", "[hook][before]"
 // After
 // ============================================================
 
-TEST_CASE("InlineHook - after hook preserves original result", "[hook][after]") {
+TEST_CASE("InlineHook - after hook preserves original result") {
     g_side_effect = 0;
 
     auto detour = [](auto &, int a, int b) -> int {
@@ -190,7 +191,7 @@ TEST_CASE("InlineHook - after hook preserves original result", "[hook][after]") 
 // Void + Replace
 // ============================================================
 
-TEST_CASE("InlineHook - void replace hook", "[hook][replace][void]") {
+TEST_CASE("InlineHook - void replace hook") {
     g_side_effect = 0;
 
     auto detour = [](auto &) { g_side_effect += 30000; };
@@ -217,7 +218,7 @@ TEST_CASE("InlineHook - void replace hook", "[hook][replace][void]") {
 // Void + Before
 // ============================================================
 
-TEST_CASE("InlineHook - void before hook", "[hook][before][void]") {
+TEST_CASE("InlineHook - void before hook") {
     g_side_effect = 0;
 
     auto detour = [](auto &) { g_side_effect += 30000; };
@@ -238,7 +239,7 @@ TEST_CASE("InlineHook - void before hook", "[hook][before][void]") {
 // Void + After
 // ============================================================
 
-TEST_CASE("InlineHook - void after hook", "[hook][after][void]") {
+TEST_CASE("InlineHook - void after hook") {
     g_side_effect = 0;
 
     auto detour = [](auto &) { g_side_effect += 30000; };
@@ -261,7 +262,7 @@ TEST_CASE("InlineHook - void after hook", "[hook][after][void]") {
 // Multi parameters
 // ============================================================
 
-TEST_CASE("InlineHook - replace hook with multiple parameters", "[hook][replace][multi-param]") {
+TEST_CASE("InlineHook - replace hook with multiple parameters") {
     g_side_effect = 0;
     g_args_log.clear();
 
@@ -302,7 +303,7 @@ TEST_CASE("InlineHook - replace hook with multiple parameters", "[hook][replace]
 // Floating point
 // ============================================================
 
-TEST_CASE("InlineHook - before hook with floating point parameters", "[hook][before][float]") {
+TEST_CASE("InlineHook - before hook with floating point parameters") {
     g_side_effect = 0;
 
     REQUIRE(float_return(2.5, 3.0f) == 7.5);
@@ -332,7 +333,7 @@ TEST_CASE("InlineHook - before hook with floating point parameters", "[hook][bef
 // Floating point + After
 // ============================================================
 
-TEST_CASE("InlineHook - after hook with floating point return", "[hook][after][float]") {
+TEST_CASE("InlineHook - after hook with floating point return") {
     g_side_effect = 0;
 
     auto detour = [](auto &, double x, float y) -> double {
@@ -362,7 +363,7 @@ TEST_CASE("InlineHook - after hook with floating point return", "[hook][after][f
 // String return
 // ============================================================
 
-TEST_CASE("InlineHook - replace hook with string return", "[hook][replace][string]") {
+TEST_CASE("InlineHook - replace hook with string return") {
     g_side_effect = 0;
 
     auto detour = [](auto &, const std::string &s1, std::string s2) -> std::string {
@@ -394,7 +395,7 @@ TEST_CASE("InlineHook - replace hook with string return", "[hook][replace][strin
 // Void + multiple parameters
 // ============================================================
 
-TEST_CASE("InlineHook - replace void function with multiple parameters", "[hook][replace][void][multi-param]") {
+TEST_CASE("InlineHook - replace void function with multiple parameters") {
     g_side_effect = 0;
 
     multi_param_void(10, 'A', "test");
@@ -424,7 +425,7 @@ TEST_CASE("InlineHook - replace void function with multiple parameters", "[hook]
 // Hook type switching
 // ============================================================
 
-TEST_CASE("InlineHook - hook type switching", "[hook][type]") {
+TEST_CASE("InlineHook - hook type switching") {
     g_side_effect = 0;
 
     auto detour = [](auto &, int a, int b) -> int {
@@ -484,7 +485,7 @@ TEST_CASE("InlineHook - hook type switching", "[hook][type]") {
 //
 // ============================================================
 
-TEST_CASE("InlineHook - lvalue callable", "[hook][callable][forwarding]") {
+TEST_CASE("InlineHook - lvalue callable") {
     g_side_effect = 0;
 
     auto detour = [](auto &, int a, int b) -> int {
@@ -513,7 +514,7 @@ TEST_CASE("InlineHook - lvalue callable", "[hook][callable][forwarding]") {
 // Verifies that rvalue lambdas are also accepted.
 // ============================================================
 
-TEST_CASE("InlineHook - rvalue callable", "[hook][callable][forwarding]") {
+TEST_CASE("InlineHook - rvalue callable") {
     g_side_effect = 0;
 
     auto hook = makeInlineHook(&simple_add, [](auto &, int a, int b) -> int {
@@ -536,7 +537,7 @@ TEST_CASE("InlineHook - rvalue callable", "[hook][callable][forwarding]") {
 // Reentrancy
 // ============================================================
 
-TEST_CASE("InlineHook - reentrant hook falls back to trampoline", "[hook][reentrant]") {
+TEST_CASE("InlineHook - reentrant hook falls back to trampoline") {
     g_side_effect = 0;
 
     auto detour = [](auto &, int a, int b) -> int {
@@ -603,7 +604,7 @@ static auto WINAPI threadWorker(void *) -> DWORD {
     return 0;
 }
 
-TEST_CASE("InlineHook - reentry is suppressed per thread, not globally", "[hook][thread][reentrant]") {
+TEST_CASE("InlineHook - reentry is suppressed per thread, not globally") {
     g_thread_first_entries = 0;
     g_thread_detour_calls = 0;
     g_thread_bad_results = 0;
@@ -615,9 +616,8 @@ TEST_CASE("InlineHook - reentry is suppressed per thread, not globally", "[hook]
         // 因为有线程在里面时，其它线程会被实例上的共享标志位挡在 detour 之外。
         int inside = g_thread_inside.fetch_add(1, std::memory_order_acq_rel) + 1;
         int peak = g_thread_peak.load(std::memory_order_relaxed);
-        while (peak < inside &&
-               !g_thread_peak.compare_exchange_weak(peak, inside, std::memory_order_acq_rel,
-                                                    std::memory_order_relaxed)) {
+        while (peak < inside && !g_thread_peak.compare_exchange_weak(peak, inside, std::memory_order_acq_rel,
+                                                                     std::memory_order_relaxed)) {
         }
 
         // first 是 thread_local，每个线程一份。本用例每次都新建 worker 线程，
@@ -631,8 +631,8 @@ TEST_CASE("InlineHook - reentry is suppressed per thread, not globally", "[hook]
             g_thread_first_entries.fetch_add(1, std::memory_order_acq_rel);
 
             constexpr int SpinBudget = 20'000'000;
-            for (int spin = 0;
-                 spin < SpinBudget && g_thread_first_entries.load(std::memory_order_acquire) < 2; ++spin) {
+            for (int spin = 0; spin < SpinBudget && g_thread_first_entries.load(std::memory_order_acquire) < 2;
+                 ++spin) {
                 YieldProcessor();
             }
         }
@@ -695,7 +695,7 @@ TEST_CASE("InlineHook - reentry is suppressed per thread, not globally", "[hook]
 //   - stub 结束时 RSP 与实参寄存器都精确还原，所以栈参数与栈回溯都不受影响。
 // ============================================================
 
-TEST_CASE("InlineHook - leaves TEB ArbitraryUserPointer untouched", "[hook][tls][teb]") {
+TEST_CASE("InlineHook - leaves TEB ArbitraryUserPointer untouched") {
     g_side_effect = 0;
 
     auto *teb = reinterpret_cast<_NT_TIB *>(NtCurrentTeb());
@@ -726,7 +726,7 @@ TEST_CASE("InlineHook - leaves TEB ArbitraryUserPointer untouched", "[hook][tls]
     teb->ArbitraryUserPointer = saved;
 }
 
-TEST_CASE("InlineHook - nested hooks keep their own instance", "[hook][instance][nesting]") {
+TEST_CASE("InlineHook - nested hooks keep their own instance") {
     g_side_effect = 0;
     g_site_hook_a_calls = 0;
     g_site_hook_b_calls = 0;
@@ -764,7 +764,7 @@ TEST_CASE("InlineHook - nested hooks keep their own instance", "[hook][instance]
     REQUIRE(hookB->uninstall());
 }
 
-TEST_CASE("InlineHook - one callable type can back multiple instances", "[hook][instance][multi]") {
+TEST_CASE("InlineHook - one callable type can back multiple instances") {
     g_side_effect = 0;
 
     // 同一个闭包类型用在两个目标上：实例身份来自每实例的 thunk，
@@ -839,7 +839,7 @@ REZERO_NOINLINE double mixed_param_target(double a, double b, double c, double d
     return (a + b) * (c + d) + e - f;
 }
 
-TEST_CASE("InlineHook - entry stub preserves argument registers", "[hook][tls][args]") {
+TEST_CASE("InlineHook - entry stub preserves argument registers") {
     g_side_effect = 0;
 
     // 期望值由未打补丁的调用给出
@@ -862,7 +862,7 @@ TEST_CASE("InlineHook - entry stub preserves argument registers", "[hook][tls][a
             seenE = e;
             seenF = f;
 
-            return -1.0;  // Before 模式下返回值被忽略
+            return -1.0; // Before 模式下返回值被忽略
         });
     hook->mode(HookMode::Before);
 
@@ -886,7 +886,7 @@ TEST_CASE("InlineHook - entry stub preserves argument registers", "[hook][tls][a
     REQUIRE(hook->uninstall());
 }
 
-TEST_CASE("InlineHook - TLS context is set on entry and restored on exit", "[hook][tls][context]") {
+TEST_CASE("InlineHook - TLS context is set on entry and restored on exit") {
     g_side_effect = 0;
     g_outerPendingCleared = false;
     g_innerPendingCleared = false;
@@ -954,7 +954,7 @@ TEST_CASE("InlineHook - TLS context is set on entry and restored on exit", "[hoo
 // Release 构建下一调用就 AV。这里直接把字节喂给重定位器，断言位移被精确修正。
 // ============================================================
 
-TEST_CASE("Disassembler - relocates RIP-relative memory operands", "[disasm][reloc]") {
+TEST_CASE("Disassembler - relocates RIP-relative memory operands") {
     uint8_t source[16] = {};
     const std::int32_t originalDisplacement = 0x00012345;
 
@@ -962,7 +962,7 @@ TEST_CASE("Disassembler - relocates RIP-relative memory operands", "[disasm][rel
     source[0] = 0x01;
     source[1] = 0x0D;
     std::memcpy(&source[2], &originalDisplacement, 4);
-    source[6] = 0xC3;  // ret：让解码在这里停下
+    source[6] = 0xC3; // ret：让解码在这里停下
 
     uint8_t trampolineBytes[128] = {};
 
@@ -986,7 +986,7 @@ TEST_CASE("Disassembler - relocates RIP-relative memory operands", "[disasm][rel
     CHECK(trampolineNext + relocated == expectedTarget);
 }
 
-TEST_CASE("Disassembler - relocates relative branch immediates", "[disasm][reloc]") {
+TEST_CASE("Disassembler - relocates relative branch immediates") {
     uint8_t source[16] = {};
     const std::int32_t originalDisplacement = 0x40;
 
@@ -1029,7 +1029,7 @@ static bool isPageExecutableReadWrite(void *ptr, std::size_t size = 0x1000) {
 
 #endif
 
-TEST_CASE("tryAllocateNear - null input", "[memory][allocation]") {
+TEST_CASE("tryAllocateNear - null input") {
 #ifdef _WIN32
     REQUIRE(detail::tryAllocateNear(nullptr) == nullptr);
 #else
@@ -1039,7 +1039,7 @@ TEST_CASE("tryAllocateNear - null input", "[memory][allocation]") {
 
 #ifdef _WIN32
 
-TEST_CASE("tryAllocateNear - allocate near target", "[memory][allocation]") {
+TEST_CASE("tryAllocateNear - allocate near target") {
     std::uint8_t local = 0;
 
     auto *target = &local;
@@ -1071,7 +1071,7 @@ TEST_CASE("tryAllocateNear - allocate near target", "[memory][allocation]") {
     VirtualFree(allocated, 0, MEM_RELEASE);
 }
 
-TEST_CASE("tryAllocateNear - executable memory", "[memory][allocation][executable]") {
+TEST_CASE("tryAllocateNear - executable memory") {
     std::uint8_t local = 0;
 
     auto *allocated = detail::tryAllocateNear(&local);
@@ -1098,7 +1098,7 @@ TEST_CASE("tryAllocateNear - executable memory", "[memory][allocation][executabl
     VirtualFree(allocated, 0, MEM_RELEASE);
 }
 
-TEST_CASE("tryAllocateNear - repeated allocation", "[memory][allocation][stress]") {
+TEST_CASE("tryAllocateNear - repeated allocation") {
     std::uint8_t local = 0;
 
     constexpr int Count = 10;
@@ -1148,7 +1148,7 @@ TEST_CASE("tryAllocateNear - repeated allocation", "[memory][allocation][stress]
 // uninstall() 摘掉补丁之后等它归零，尽量保证"返回后不再有 detour 在跑"。
 // ============================================================
 
-TEST_CASE("InlineHook - active call counter is balanced", "[hook][uninstall][drain]") {
+TEST_CASE("InlineHook - active call counter is balanced") {
     g_side_effect = 0;
 
     auto *hook = makeInlineHook(&site_add, [](auto &, int a, int b) -> int { return a + b + 1; });
@@ -1177,7 +1177,7 @@ static auto WINAPI drainWorker(void *) -> DWORD {
     return 0;
 }
 
-TEST_CASE("InlineHook - uninstall waits for in-flight calls", "[hook][uninstall][drain]") {
+TEST_CASE("InlineHook - uninstall waits for in-flight calls") {
     g_side_effect = 0;
     g_drainInsideDetour = false;
     g_drainDetourFinished = false;
@@ -1224,7 +1224,7 @@ TEST_CASE("InlineHook - uninstall waits for in-flight calls", "[hook][uninstall]
 
 static Result<void, ErrorCode> g_uninstallFromDetour{};
 
-TEST_CASE("InlineHook - uninstall from inside the detour does not deadlock", "[hook][uninstall][drain]") {
+TEST_CASE("InlineHook - uninstall from inside the detour does not deadlock") {
     g_side_effect = 0;
     g_uninstallFromDetour = Result<void, ErrorCode>{};
 
@@ -1263,7 +1263,7 @@ TEST_CASE("InlineHook - uninstall from inside the detour does not deadlock", "[h
 
 static int g_trampolineDetourCalls = 0;
 
-TEST_CASE("InlineHook - detour calls the original through self.trampoline()", "[hook][trampoline]") {
+TEST_CASE("InlineHook - detour calls the original through self.trampoline()") {
     g_side_effect = 0;
     g_trampolineDetourCalls = 0;
 
@@ -1287,8 +1287,8 @@ TEST_CASE("InlineHook - detour calls the original through self.trampoline()", "[
 
     CHECK(baseline == 7);
     CHECK(baselineSideEffect == 5);
-    CHECK(hooked == baseline * 10);              // trampoline 把原函数的返回值交回来了
-    CHECK(g_side_effect == baselineSideEffect);  // 而且原函数真的执行了
+    CHECK(hooked == baseline * 10);             // trampoline 把原函数的返回值交回来了
+    CHECK(g_side_effect == baselineSideEffect); // 而且原函数真的执行了
 
     // 关键：走的不是补丁，所以 detour 只应该被进一次
     // （按名字调原函数的话这里会是 2 —— 第二次靠重入守卫走 trampoline）
@@ -1300,19 +1300,18 @@ TEST_CASE("InlineHook - detour calls the original through self.trampoline()", "[
     CHECK(site_add(3, 4) == 7);
 }
 
-TEST_CASE("InlineHook - trampoline forwards all arguments", "[hook][trampoline]") {
+TEST_CASE("InlineHook - trampoline forwards all arguments") {
     g_side_effect = 0;
 
     // 4 个浮点 + 2 个栈实参：正好覆盖 XMM0-3 与栈参数两条通道
     const double baseline = mixed_param_target(1.5, 2.5, 3.5, 4.5, 5, 6);
     const std::size_t baselineSideEffect = g_side_effect;
 
-    auto *hook = makeInlineHook(
-        &mixed_param_target,
-        [](auto &self, double a, double b, double c, double d, int e, int f) -> double {
-            // 参数原样转交给 trampoline
-            return self.trampoline(a, b, c, d, e, f) + 1.0;
-        });
+    auto *hook = makeInlineHook(&mixed_param_target,
+                                [](auto &self, double a, double b, double c, double d, int e, int f) -> double {
+                                    // 参数原样转交给 trampoline
+                                    return self.trampoline(a, b, c, d, e, f) + 1.0;
+                                });
     hook->mode(HookMode::Replace);
 
     REQUIRE(hook->install());
@@ -1321,12 +1320,12 @@ TEST_CASE("InlineHook - trampoline forwards all arguments", "[hook][trampoline]"
     const double hooked = mixed_param_target(1.5, 2.5, 3.5, 4.5, 5, 6);
 
     CHECK(hooked == baseline + 1.0);
-    CHECK(g_side_effect == baselineSideEffect);  // 原函数按原样执行
+    CHECK(g_side_effect == baselineSideEffect); // 原函数按原样执行
 
     REQUIRE(hook->uninstall());
 }
 
-TEST_CASE("InlineHook - trampoline works for void returns", "[hook][trampoline]") {
+TEST_CASE("InlineHook - trampoline works for void returns") {
     g_side_effect = 0;
 
     // 注意：这里必须显式写 `-> void`。
@@ -1335,8 +1334,8 @@ TEST_CASE("InlineHook - trampoline works for void returns", "[hook][trampoline]"
     // 一旦访问 self 的成员就是 C2027（使用了未定义类型）。
     // 即：凡是"返回类型靠推导 + 要访问 self"的 detour，都得显式写返回类型。
     auto *hook = makeInlineHook(&simple_void_noargs, [](auto &self) -> void {
-        self.trampoline();    // void 返回：直接转发
-        g_side_effect += 1;   // detour 自己的动作
+        self.trampoline();  // void 返回：直接转发
+        g_side_effect += 1; // detour 自己的动作
     });
     hook->mode(HookMode::Replace);
 
@@ -1354,4 +1353,3 @@ TEST_CASE("InlineHook - trampoline works for void returns", "[hook][trampoline]"
 // "卸载时不释放可执行页"；现在 releaseExecutionMemory() 一律释放并清空
 // Thunk / Trampoline 的指针，`trampoline()` 在卸载后不再可用（要调原函数直接调 Src），
 // 所以该用例已删除。卸载后"在飞调用"的安全性由 [drain] 那组用例覆盖。
-
